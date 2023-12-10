@@ -27,3 +27,11 @@ class PurchaseOrdersSerializer(ModelSerializer):
     def update(self, instance, validated_data):
         validated_data.pop('po_number', None)
         return super().update(instance, validated_data)
+
+
+
+# Historical Performances Serializer #
+class HistoricalPerformancesSerializer(ModelSerializer):
+    class Meta:
+        model = HistoricalPerformancesModel
+        fields = '__all__'

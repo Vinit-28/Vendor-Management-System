@@ -3,8 +3,9 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.core.exceptions import ObjectDoesNotExist
-from Vendor_Manager.serializers import VendorProfileSerializer, PurchaseOrdersSerializer
+from Vendor_Manager.serializers import VendorProfileSerializer, PurchaseOrdersSerializer, HistoricalPerformancesSerializer
 from Vendor_Manager.models import VendorProfileModel, PurchaseOrdersModel, HistoricalPerformancesModel
+from Vendor_Manager.utilities import update_vendor_performance
 
 
 # Vendor Profile APIs #
@@ -182,7 +183,18 @@ class PurchaseOrdersView(APIView):
             vendor = VendorProfileModel.objects.get(pk=vendor_id) if vendor_id else purchase_order.vendor # VAlidating the whether the new/updated vendor exists or not #
             serializer = PurchaseOrdersSerializer(purchase_order, data=request.data, partial=True)
             if serializer.is_valid():
+                po_status_completed = False
+                po_status_updated = False
+                po_acknowledged = False
+                if request.data.get('status') and request.data.get('status') != purchase_order.status:
+                    po_status_updated = True
+                    if request.data.get('status') == 'completed':
+                        po_status_completed = True
+                if request.data.get('acknowledgment_date') and purchase_order.acknowledgment_date is None:
+                    po_acknowledged = True
                 serializer.save()
+                # Updating Vendor Performance #
+                update_vendor_performance(vendor, po_status_completed, po_status_updated, po_acknowledged)
                 response['status'] = 'Success'
                 response['message'] = 'Purchase Order Updated Successfully.'
                 response['Purchase Order'] = serializer.data
@@ -227,5 +239,26 @@ class PurchaseOrdersView(APIView):
             response['status'] = 'Failed'
             response['Errors'] = {
                 'message': [f"{err}."]
+            }
+        return Response(response, status=response_status)
+
+
+
+# Historical Performances APIs #
+class HistoricalPerformancesModelView(APIView):
+    def get(self, request, vendor_id):
+        response = dict()
+        response_status = status.HTTP_200_OK
+        try:
+            vendor_profile = VendorProfileModel.objects.get(pk=vendor_id)
+            performance_records = HistoricalPerformancesModel.objects.filter(vendor=vendor_profile).order_by('-date')
+            serializer = HistoricalPerformancesSerializer(performance_records, many=True)
+            response['status'] = 'success'
+            response['Performance Records'] = serializer.data
+        except ObjectDoesNotExist as err:
+            response_status = status.HTTP_400_BAD_REQUEST
+            response['status'] = 'Failed'
+            response['Errors'] = {
+                'message': [f'No Vendor with Vendor Id "{vendor_id}".']
             }
         return Response(response, status=response_status)
